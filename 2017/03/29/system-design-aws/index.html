@@ -1,0 +1,1024 @@
+<!doctype html>
+
+
+
+  
+
+
+<html class="theme-next mist use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.0" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+  <link rel="alternate" href="/atom.xml" title="St.c@tz" type="application/atom+xml" />
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=5.1.0" />
+
+
+
+
+
+
+<meta name="description" content="https://github.com/donnemartin/system-design-primer/blob/master/solutions/system_design/scaling_aws/README.md
+＃设计一个在AWS上扩展到数百万用户的系统
+*注意：本文档直接链接到[系统设计主题]（https://github.com/donnemartin/system-design-pr">
+<meta property="og:type" content="article">
+<meta property="og:title" content="system-design-aws">
+<meta property="og:url" content="http://stcatz.com/2017/03/29/system-design-aws/index.html">
+<meta property="og:site_name" content="St.c@tz">
+<meta property="og:description" content="https://github.com/donnemartin/system-design-primer/blob/master/solutions/system_design/scaling_aws/README.md
+＃设计一个在AWS上扩展到数百万用户的系统
+*注意：本文档直接链接到[系统设计主题]（https://github.com/donnemartin/system-design-pr">
+<meta property="og:updated_time" content="2017-03-29T06:58:56.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="system-design-aws">
+<meta name="twitter:description" content="https://github.com/donnemartin/system-design-primer/blob/master/solutions/system_design/scaling_aws/README.md
+＃设计一个在AWS上扩展到数百万用户的系统
+*注意：本文档直接链接到[系统设计主题]（https://github.com/donnemartin/system-design-pr">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    sidebar: {"position":"left","display":"post","offset":12,"offset_float":0,"b2t":false,"scrollpercent":false},
+    fancybox: true,
+    motion: true,
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://stcatz.com/2017/03/29/system-design-aws/"/>
+
+
+
+
+
+  <title> system-design-aws | St.c@tz </title>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+
+
+
+
+
+  <script type="text/javascript">
+    var _hmt = _hmt || [];
+    (function() {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?96d6f8092e5054cdaa5f228ead752f19";
+      var s = document.getElementsByTagName("script")[0];
+      s.parentNode.insertBefore(hm, s);
+    })();
+  </script>
+
+
+
+
+
+
+
+
+
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail ">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">St.c@tz</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <h1 class="site-subtitle" itemprop="description"></h1>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
+            
+            标签
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal " itemscope itemtype="http://schema.org/Article">
+    <link itemprop="mainEntityOfPage" href="http://stcatz.com/2017/03/29/system-design-aws/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="stcatz">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="https://avatars2.githubusercontent.com/u/824526?v=3&s=460">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="St.c@tz">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h2 class="post-title" itemprop="name headline">
+            
+            
+              
+                system-design-aws
+              
+            
+          </h2>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2017-03-29T14:58:35+08:00">
+                2017-03-29
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a class="cloud-tie-join-count" href="/2017/03/29/system-design-aws/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count join-count" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p><a href="https://github.com/donnemartin/system-design-primer/blob/master/solutions/system_design/scaling_aws/README.md" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer/blob/master/solutions/system_design/scaling_aws/README.md</a></p>
+<p>＃设计一个在AWS上扩展到数百万用户的系统</p>
+<p>*注意：本文档直接链接到[系统设计主题]（<a href="https://github.com/donnemartin/system-design-primer#index-of-system-design-topics）中找到的相关区域，以避免重复。请参阅链接内容，了解一般说话要点，权衡和替代方案。" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#index-of-system-design-topics）中找到的相关区域，以避免重复。请参阅链接内容，了解一般说话要点，权衡和替代方案。</a></p>
+<p>##步骤1：概述用例和约束</p>
+<blockquote>
+<p>收集问题的要求和范围。<br>提出问题来澄清用例和约束。<br>讨论假设。</p>
+</blockquote>
+<p>没有面试官来解决澄清问题，我们将定义一些用例和约束。</p>
+<p>＃＃＃ 用例</p>
+<p>解决这个问题需要一个迭代的方法：1）<strong>基准/负载测试</strong>，2）<strong>配置文件</strong>的瓶颈3）解决瓶颈，同时评估替代和权衡，以及4）重复，这是很好的模式用于将基本设计演变为可扩展设计。</p>
+<p>除非您有AWS的背景或正在申请需要AWS知识的职位，否则不具备AWS特定的详细信息。然而，<strong>本项研究中讨论的许多原则可以更普遍地适用于AWS生态系统之外。</strong></p>
+<p>####我们将范围的问题只处理以下用例</p>
+<ul>
+<li><strong>用户</strong>进行读或写请求<ul>
+<li><strong>服务</strong>处理，存储用户数据，然后返回结果</li>
+</ul>
+</li>
+<li><strong>服务</strong>需要从少量用户的服务发展到数百万的用户<br>  *讨论一般的缩放模式，因为我们发展架构来处理大量的用户和请求</li>
+<li><strong>服务</strong>具有高可用性</li>
+</ul>
+<p>限制和假设</p>
+<p>####状态假设</p>
+<p><em>流量不均匀分布
+</em>需要关系数据<br><em>从1个用户到数千万用户
+    </em>将用户数量增加为：<br>        <em>用户+
+        </em>用户++<br>        *用户+++</p>
+<pre><code>    * ...
+* 1000万用户
+*每月10亿笔
+*每月1000亿读
+* 100：1读写比
+*每个写入1 KB内容
+</code></pre><p>####计算用法</p>
+<p><strong>如果您应该运行回软件使用计算，请向访问员澄清。</strong></p>
+<p><em>每月1 TB新内容
+    </em>每个写入1 KB *每月写入10亿次</p>
+<pre><code>* 3年内有36 TB的新内容
+*假设大多数写入来自新内容，而不是对现有内容的更新
+</code></pre><p><em>平均每秒400次写入
+</em>平均每秒40,000个读数</p>
+<p>方便转换指南：</p>
+<p><em>每月250万秒
+</em>每秒1个请求=每月250万个请求<br><em>每秒40个请求=每月1亿个请求
+</em>每秒400个请求=每月10亿个请求</p>
+<p>##步骤2：创建一个高级设计</p>
+<blockquote>
+<p>概述所有重要组件的高级设计。</p>
+</blockquote>
+<p>！[Imgur]（<a href="http://i.imgur.com/B8LDKD7.png）" target="_blank" rel="external">http://i.imgur.com/B8LDKD7.png）</a></p>
+<p>##步骤3：设计核心组件</p>
+<blockquote>
+<p>详细介绍每个核心组件。</p>
+</blockquote>
+<p>###用例：用户进行读或写请求</p>
+<p>####目标</p>
+<p><em>只有1-2个用户，您只需要一个基本的设置
+    </em>单箱简单<br>    *需要时垂直缩放<br>    监控确定瓶颈</p>
+<p>####从单个框开始</p>
+<ul>
+<li><strong> EC2上的Web服务器</strong><br>  *存储用户数据<ul>
+<li>[<strong> MySQL数据库</strong>]（<a href="https://github.com/donnemartin/system-design-primer#sql）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#sql）</a></li>
+</ul>
+</li>
+</ul>
+<p>使用<strong>垂直缩放</strong>：</p>
+<p><em>只需选择一个更大的盒子
+</em>密切关注指标，以确定如何扩大规模<br>    <em>使用基本的监控来确定瓶颈：CPU，内存，IO，网络等<br>    CloudWatch，top，nagios，statsd，石墨等
+</em>垂直缩放会变得非常昂贵<br>*无冗余/故障转移</p>
+<p><em>权衡，替代方案及其他细节：</em></p>
+<ul>
+<li><strong>垂直缩放</strong>的替代方法是[<strong>水平缩放</strong>]（<a href="https://github.com/donnemartin/system-design-primer#horizo​​ntal-scaling）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#horizo​​ntal-scaling）</a></li>
+</ul>
+<p>####从SQL开始，考虑NoSQL</p>
+<p>假设有关系数据的需求。我们可以在单个框中开始使用<strong> MySQL数据库</strong>。</p>
+<p><em>权衡，替代方案及其他细节：</em></p>
+<p>*参见[关系数据库管理系统（RDBMS）]（<a href="https://github.com/donnemartin/system-design-primer#relational-database-management-system-rdbms）部分" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#relational-database-management-system-rdbms）部分</a><br>讨论使用[SQL或NoSQL]的原因（<a href="https://github.com/donnemartin/system-design-primer#sql-or-nosql）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#sql-or-nosql）</a></p>
+<p>####分配公共静态IP</p>
+<p><em>弹性IP提供一个公共端点，其IP在重新启动时不会改变
+</em>帮助进行故障切换，只需将域指向新的IP</p>
+<p>####使用DNS</p>
+<p>添加一个** DNS，如路由53，将域映射到实例的公共IP。</p>
+<p><em>权衡，替代方案及其他细节：</em></p>
+<p>*请参阅[域名系统]（<a href="https://github.com/donnemartin/system-design-primer#domain-name-system）部分" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#domain-name-system）部分</a></p>
+<p>####保护网络服务器</p>
+<p><em>打开必需的端口
+    </em>允许Web服务器响应来自以下的传入请求：</p>
+<pre><code>    * 80用于HTTP
+    * 443用于HTTPS
+    * 22用于SSH只将白名单IP
+*防止Web服务器启动出站连接
+</code></pre><p><em>权衡，替代方案及其他细节：</em></p>
+<p>*请参阅[安全性]（<a href="https://github.com/donnemartin/system-design-primer#security）部分" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#security）部分</a></p>
+<p>##步骤4：缩放设计</p>
+<p>鉴于限制，确定并解决瓶颈问题。</p>
+<p>###用户+</p>
+<p>！[Imgur]（<a href="http://i.imgur.com/rrfjMXB.png）" target="_blank" rel="external">http://i.imgur.com/rrfjMXB.png）</a></p>
+<p>####假设</p>
+<p>我们的用户数量开始上升，我们的单个盒子上的负载正在增加。我们的<strong>基准/负载测试</strong>和<strong>分析</strong>指向<strong> MySQL数据库</strong>占用越来越多的内存和CPU资源，而用户内容正在填补磁盘空间。</p>
+<p>迄今为止，我们已经能够使用<strong> Vertical Scaling </strong>来解决这些问题。不幸的是，这已经变得相当昂贵，它不允许独立扩展<strong> MySQL数据库</strong>和<strong> Web服务器</strong>。</p>
+<p>####目标</p>
+<p><em>减轻单个盒子上的负载，并允许独立缩放
+    </em>将静态内容分别存储在<strong>对象商店中</strong><br>    <em>将</em> MySQL数据库<strong>移动到一个单独的框<br><em>缺点
+    </em>这些更改会增加复杂性，并且需要更改</strong> Web服务器<strong>以指向</strong>对象存储<strong>和</strong> MySQL数据库<em>*
+    </em>必须采取额外的安全措施来确保新组件的安全</p>
+<pre><code>* AWS的成本也可能会增加，但应该与自己管理类似系统的成本进行权衡
+</code></pre><p>####分别存储静态内容</p>
+<p><em>考虑使用像S3一样的托管<strong>对象商店</strong>来存储静态内容
+    </em>高度可扩展和可靠<br>    <em>服务器端加密
+</em>将静态内容移动到S3<br>    *用户文件</p>
+<pre><code>* JS
+* CSS
+* 图片
+*视频
+</code></pre><p>####将MySQL数据库移动到单独的框中</p>
+<p><em>考虑使用像RDS这样的服务来管理<strong> MySQL数据库</strong>
+    </em>简单管理，规模化<br>    <em>多个可用区域
+    </em>休息加密</p>
+<p>####保护系统</p>
+<p><em>在运输和休息时加密数据
+</em>使用虚拟私有云<br>    <em>为单个<strong> Web服务器</strong>创建一个公共子网，以便它可以从互联网发送和接收流量
+    </em>创建一个私有子网，防止外部访问<br>    <em>仅为每个组件打开白名单IP的端口
+</em>在本练习的其余部分，应对新组件执行相同的模式</p>
+<p><em>权衡，替代方案及其他细节：</em></p>
+<p>*请参阅[安全性]（<a href="https://github.com/donnemartin/system-design-primer#security）部分" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#security）部分</a></p>
+<p>###用户++</p>
+<p>！[Imgur]（<a href="http://i.imgur.com/raoFTXM.png）" target="_blank" rel="external">http://i.imgur.com/raoFTXM.png）</a></p>
+<p>####假设</p>
+<p>我们的<strong>基准/负载测试</strong>和<strong>分析</strong>显示，我们的单个** Web服务器在高峰时段出现瓶颈，导致响应缓慢，在某些情况下停机。随着服务的成熟，我们也希望朝向更高的可用性和冗余。</p>
+<p>####目标</p>
+<p><em>以下目标尝试解决<strong> Web服务器</strong>的扩展问题
+    </em>基于<strong>基准/负载测试</strong>和<strong>分析</strong>，您可能只需要实现这些技术中的一个或两个<br><em>使用[<strong>水平缩放</strong>]（<a href="https://github.com/donnemartin/system-design-primer#horizo​​ntal-scaling）来处理增加的负载并解决单点故障" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#horizo​​ntal-scaling）来处理增加的负载并解决单点故障</a>
+    </em>添加一个[<strong>负载平衡器</strong>]（<a href="https://github.com/donnemartin/system-design-primer#load-balancer），如亚马逊的ELB或HAProxy" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#load-balancer），如亚马逊的ELB或HAProxy</a></p>
+<pre><code>    * ELB高度可用
+    *如果您正在配置自己的负载平衡器**，请在[主动 - 主动]（https://github.com/donnemartin/system-design-primer#active-active）或[主动被动]（https://github.com/donnemartin/system-design-primer#active-passive）在多个可用区域将提高可用性
+    *在**负载平衡器**上终止SSL，以减少后端服务器的计算负载，并简化证书管理
+*使用多个** Web服务器**分布在多个可用区域之间
+*在多个可用区域中，在[**主从动故障切换**]（https://github.com/donnemartin/system-design-primer#master-slave-replication）模式下使用多个** MySQL **实例，以改善冗余
+</code></pre><p><em>将<strong> Web服务器</strong>从[<strong>应用程序服务器</strong>]（<a href="https://github.com/donnemartin/system-design-primer#application-layer）中分离出来" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#application-layer）中分离出来</a>
+    </em>独立缩放和配置两个图层</p>
+<pre><code>* ** Web服务器**可以作为[**反向代理**]运行（https://github.com/donnemartin/system-design-primer#reverse-proxy-web-server）
+*例如，您可以添加**应用程序服务器**处理**读取API **，而其他处理**写入API **
+</code></pre><p><em>将静态（和一些动态）内容移动到[<em>*内容传送网络（CDN）</em></em>]（<a href="https://github.com/donnemartin/system-design-primer#content-delivery-network），如CloudFront减少负载和延迟" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#content-delivery-network），如CloudFront减少负载和延迟</a></p>
+<p><em>权衡，替代方案及其他细节：</em></p>
+<p>*有关详细信息，请参阅上述链接内容</p>
+<p>###用户+++</p>
+<p>！[Imgur]（<a href="http://i.imgur.com/OZCxJr0.png）" target="_blank" rel="external">http://i.imgur.com/OZCxJr0.png）</a></p>
+<p><strong>注意：</strong> <strong>内部负载平衡器</strong>未显示以减少杂波</p>
+<p>####假设</p>
+<p>我们的<strong>基准/负载测试</strong>和<strong>分析</strong>显示我们读取很重（100：1写入），我们的数据库的性能低于高读请求。</p>
+<p>####目标</p>
+<p><em>以下目标尝试解决与MySQL数据库**的扩展问题
+    </em>基于<strong>基准/负载测试</strong>和<strong>分析</strong>，您可能只需要实现这些技术中的一个或两个<br><em>将以下数据移动到[<strong> Memory Cache </strong>]（<a href="https://github.com/donnemartin/system-design-primer#cache），如Elasticache，以减少负载和延迟：" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#cache），如Elasticache，以减少负载和延迟：</a>
+    </em>经常访问的内容从<strong> MySQL </strong><br>        <em>首先，尝试配置<strong> MySQL数据库</strong>缓存，以查看是否足以在实现<strong>内存缓存之前缓解瓶颈</strong>
+    </em>来自<strong> Web服务器的会话数据</strong></p>
+<pre><code>    * ** Web服务器**成为无状态，允许**自动缩放**
+*从内存中读取1 MB大约需要250微秒，而从SSD读取4倍，从磁盘读取长度为80倍。&lt;sup&gt; &lt;a href = https：//github.com/donnemartin/system-design-primer#latency- number-every-programmer-should-know&gt; 1 &lt;/a&gt; &lt;/ sup&gt;
+</code></pre><p><em>添加[<strong> MySQL阅读副本</strong>]（<a href="https://github.com/donnemartin/system-design-primer#master-slave-replication）以减少写入主机的负载" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#master-slave-replication）以减少写入主机的负载</a>
+</em>添加更多<strong> Web服务器</strong>和<strong>应用程序服务器</strong>以提高响应能力</p>
+<p><em>权衡，替代方案及其他细节：</em></p>
+<p>*有关详细信息，请参阅上述链接内容</p>
+<p>####添加MySQL读取副本</p>
+<p><em>除了添加和缩放<strong>内存缓存</strong>，<strong> MySQL读副本</strong>还可以帮助减轻对MySQL写入大师的负载**
+</em>将逻辑添加到<strong> Web服务器</strong>以分离出写入和读取<br><em>添加<strong>负载平衡器</strong>在<strong> MySQL读副本</strong>（未图示以减少杂乱）
+</em>大多数服务都是读取重，而不是重写</p>
+<p><em>权衡，替代方案及其他细节：</em></p>
+<p>*参见[关系数据库管理系统（RDBMS）]（<a href="https://github.com/donnemartin/system-design-primer#relational-database-management-system-rdbms）部分" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#relational-database-management-system-rdbms）部分</a></p>
+<p>###用户++++</p>
+<p>！[Imgur]（<a href="http://i.imgur.com/3X8nmdL.png）" target="_blank" rel="external">http://i.imgur.com/3X8nmdL.png）</a></p>
+<p>####假设</p>
+<p>我们的<strong>基准/负载测试</strong>和<strong>分析</strong>显示，我们的流量在美国的正常营业时间尖峰，当用户离开办公室时，其显着下降。我们认为我们可以通过根据实际负载自动上下服务器来降低成本。我们是一个小商店，所以我们希望自动化尽可能多的DevOps <strong>自动缩放</strong>和一般操作。</p>
+<p>####目标</p>
+<p><em>根据需要添加<strong>自动缩放</strong>以提供容量
+    </em>跟上流量尖峰<br>    通过关闭未使用的实例来降低成本<br><em>自动化DevOps<br>    厨师，木偶，安全等
+</em>继续监控指标以解决瓶颈</p>
+<pre><code>* **主机级别** - 查看单个EC2实例
+* **综合等级** - 查看负载平衡器统计信息
+* **日志分析** - CloudWatch，CloudTrail，Loggly，Splunk，Sumo
+* **外部网站的表现** - Pingdom或New Relic
+* **处理通知和事件** - PagerDuty
+* **错误报告** - 哨兵
+</code></pre><p>####添加自动缩放</p>
+<p><em>考虑一个托管服务，如AWS <strong>自动缩放</strong>
+    </em>为每个<strong> Web服务器</strong>创建一个组，并为每个<strong>应用程序服务器</strong>类型创建一个组，将每个组放置在多个可用区域中<br>    <em>设置最小和最大数量的实例
+    </em>通过CloudWatch触发上下放大<br>        <em>可以预测的负载或
+        </em>一段时间内的指标：</p>
+<pre><code>        * CPU负载
+        * 潜伏
+        *网络流量
+        *自定义指标
+*缺点
+    *自动缩放可以引入复杂性
+    *系统可能需要一段时间才适当地扩大需求，以满足需求的增加，或者在需求下降的时候缩减
+</code></pre><p>###用户+++++</p>
+<p>！[Imgur]（<a href="http://i.imgur.com/jj3A5N8.png）" target="_blank" rel="external">http://i.imgur.com/jj3A5N8.png）</a></p>
+<p><strong>注意：</strong> <strong>自动缩放</strong>组未显示以减少杂乱</p>
+<p>####假设</p>
+<p>随着服务的不断扩大，我们会迭代运行<strong>基准/负载测试</strong>和<strong>剖析</strong>来发现和解决新的瓶颈。</p>
+<p>####目标</p>
+<p>由于问题的限制，我们将继续解决扩展问题：</p>
+<p><em>如果我们的<em>* MySQL数据库</em></em>开始增长太大，我们可能只考虑在数据库中存储有限的时间段数据，而将其余数据存储在数据仓库中，如Redshift</p>
+<pre><code>* Redshift等数据仓库可以舒适地处理每月1 TB新内容的限制
+</code></pre><p><em>每秒可获得40,000个平均读取请求，可以通过缩放<em>*内存缓存</em></em>来解决流行内容的读取流量，这对于处理不均匀分布的流量和流量峰值也很有用</p>
+<pre><code>* SQL读副本**可能在处理缓存未命中时遇到问题，我们可能需要使用其他SQL缩放模式
+</code></pre><p><em>每秒400个平均写入次数（可能是较高的峰值）对于单个<em>* SQL写入主从服务</em></em>来说可能是困难的，同时也指出需要额外的缩放技术</p>
+<p>SQL缩放模式包括：</p>
+<ul>
+<li>[联邦]（<a href="https://github.com/donnemartin/system-design-primer#federation）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#federation）</a></li>
+<li>[Sharding]（<a href="https://github.com/donnemartin/system-design-primer#sharding）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#sharding）</a></li>
+<li>[非规范化]（<a href="https://github.com/donnemartin/system-design-primer#denormalization）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#denormalization）</a></li>
+<li>[SQL Tuning]（<a href="https://github.com/donnemartin/system-design-primer#sql-tuning）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#sql-tuning）</a></li>
+</ul>
+<p>为了进一步解决高读写请求，我们还应考虑将适当的数据移动到[<strong> NoSQL数据库</strong>]（<a href="https://github.com/donnemartin/system-design-primer#nosql），如DynamoDB。" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#nosql），如DynamoDB。</a></p>
+<p>我们可以进一步分离我们的[<strong>应用服务器</strong>]（<a href="https://github.com/donnemartin/system-design-primer#application-layer），以允许独立扩展。可以不需要实时完成的批处理或计算[**异步**]（https://github.com/donnemartin/system-design-primer#asynchronism）与**队列**和**工人**：" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#application-layer），以允许独立扩展。可以不需要实时完成的批处理或计算[**异步**]（https://github.com/donnemartin/system-design-primer#asynchronism）与**队列**和**工人**：</a></p>
+<p>*例如，在照片服务中，照片上传和缩略图创建可以分开：</p>
+<pre><code>* **客户**上传照片
+* **应用服务器**将工作放在** Queue **（如SQS）中
+* **工作服务**在EC2或Lambda拉动工作的**队列**然后：
+    *创建缩略图
+    *更新**数据库**
+    *将缩略图存储在**对象商店**
+</code></pre><p><em>权衡，替代方案及其他细节：</em></p>
+<p>*有关详细信息，请参阅上述链接内容</p>
+<p>##其他谈话要点</p>
+<blockquote>
+<p>根据问题范围和剩余时间，潜在的其他主题。</p>
+</blockquote>
+<h3 id="SQL缩放模式"><a href="#SQL缩放模式" class="headerlink" title="SQL缩放模式"></a>SQL缩放模式</h3><ul>
+<li>[阅读副本]（<a href="https://github.com/donnemartin/system-design-primer#master-slave）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#master-slave）</a></li>
+<li>[联邦]（<a href="https://github.com/donnemartin/system-design-primer#federation）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#federation）</a></li>
+<li>[Sharding]（<a href="https://github.com/donnemartin/system-design-primer#sharding）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#sharding）</a></li>
+<li>[非规范化]（<a href="https://github.com/donnemartin/system-design-primer#denormalization）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#denormalization）</a></li>
+<li>[SQL Tuning]（<a href="https://github.com/donnemartin/system-design-primer#sql-tuning）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#sql-tuning）</a></li>
+</ul>
+<h4 id="NoSQL"><a href="#NoSQL" class="headerlink" title="NoSQL"></a>NoSQL</h4><ul>
+<li>[Key-value store]（<a href="https://github.com/donnemartin/system-design-primer#key-value-store）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#key-value-store）</a></li>
+<li>[文件存储]（<a href="https://github.com/donnemartin/system-design-primer#document-store）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#document-store）</a></li>
+<li>[宽栏存储]（<a href="https://github.com/donnemartin/system-design-primer#wide-column-store）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#wide-column-store）</a></li>
+<li>[Graph database]（<a href="https://github.com/donnemartin/system-design-primer#graph-database）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#graph-database）</a></li>
+<li>[SQL vs NoSQL]（<a href="https://github.com/donnemartin/system-design-primer#sql-or-nosql）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#sql-or-nosql）</a></li>
+</ul>
+<p>###缓存</p>
+<p>*在哪里缓存</p>
+<pre><code>* [客户端缓存]（https://github.com/donnemartin/system-design-primer#client-caching）
+* [CDN缓存]（https://github.com/donnemartin/system-design-primer#cdn-caching）
+* [Web服务器缓存]（https://github.com/donnemartin/system-design-primer#web-server-caching）
+* [数据库缓存]（https://github.com/donnemartin/system-design-primer#database-caching）
+* [应用缓存]（https://github.com/donnemartin/system-design-primer#application-caching）
+</code></pre><p>*什么缓存</p>
+<pre><code>* [在数据库查询级别缓存]（https://github.com/donnemartin/system-design-primer#caching-at-the-database-query-level）
+* [在对象级缓存]（https://github.com/donnemartin/system-design-primer#caching-at-the-object-level）
+</code></pre><p>*何时更新缓存</p>
+<pre><code>* [Cache-aside]（https://github.com/donnemartin/system-design-primer#cache-aside）
+* [直写]（https://github.com/donnemartin/system-design-primer#write-through）
+* [Write-back（write-back）]（https://github.com/donnemartin/system-design-primer#write-behind-write-back）
+* [Refresh ahead]（https://github.com/donnemartin/system-design-primer#refresh-ahead）
+</code></pre><p>###异步和微服务</p>
+<ul>
+<li>[消息队列]（<a href="https://github.com/donnemartin/system-design-primer#message-queues）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#message-queues）</a></li>
+<li>[任务队列]（<a href="https://github.com/donnemartin/system-design-primer#task-queues）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#task-queues）</a></li>
+<li>[Back pressure]（<a href="https://github.com/donnemartin/system-design-primer#back-pressure）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#back-pressure）</a></li>
+<li>[Microservices]（<a href="https://github.com/donnemartin/system-design-primer#microservices）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#microservices）</a></li>
+</ul>
+<p>###通讯</p>
+<p>讨论权衡：<br>    <em>与客户的外部沟通 - [REST API后的HTTP API]（<a href="https://github.com/donnemartin/system-design-primer#representational-state-transfer-rest）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#representational-state-transfer-rest）</a>
+    </em>内部沟通 - [RPC]（<a href="https://github.com/donnemartin/system-design-primer#remote-procedure-call-rpc）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#remote-procedure-call-rpc）</a></p>
+<ul>
+<li>[服务发现]（<a href="https://github.com/donnemartin/system-design-primer#service-discovery）" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#service-discovery）</a></li>
+</ul>
+<p>###安全</p>
+<p>请参阅[安全部分]（<a href="https://github.com/donnemartin/system-design-primer#security）。" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#security）。</a></p>
+<p>###延迟号码</p>
+<p>请参阅[每个程序员应该知道的延迟号码]（<a href="https://github.com/donnemartin/system-design-primer#latency-numbers-every-programmer-should-know）。" target="_blank" rel="external">https://github.com/donnemartin/system-design-primer#latency-numbers-every-programmer-should-know）。</a></p>
+<p>###正在进行</p>
+<p><em>继续对系统进行基准测试和监控，以解决瓶颈问题
+</em>缩放是一个迭代过程</p>
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <div>
+      
+        
+
+      
+    </div>
+
+    <footer class="post-footer">
+      
+
+      
+        
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2017/03/29/hello-world/" rel="next" title="Hello World">
+                <i class="fa fa-chevron-left"></i> Hello World
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </article>
+
+
+
+    <div class="post-spread">
+      
+        <!-- JiaThis Button BEGIN -->
+<div class="jiathis_style">
+  <a class="jiathis_button_tsina"></a>
+  <a class="jiathis_button_tqq"></a>
+  <a class="jiathis_button_weixin"></a>
+  <a class="jiathis_button_cqq"></a>
+  <a class="jiathis_button_douban"></a>
+  <a class="jiathis_button_renren"></a>
+  <a class="jiathis_button_qzone"></a>
+  <a class="jiathis_button_kaixin001"></a>
+  <a class="jiathis_button_copy"></a>
+  <a href="http://www.jiathis.com/share" class="jiathis jiathis_txt jiathis_separator jtico jtico_jiathis" target="_blank"></a>
+  <a class="jiathis_counter_style"></a>
+</div>
+<script type="text/javascript" >
+  var jiathis_config={
+    hideMore:false
+  }
+</script>
+<script type="text/javascript" src="http://v3.jiathis.com/code/jia.js" charset="utf-8"></script>
+<!-- JiaThis Button END -->
+
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+      <div id="cloud-tie-wrapper" class="cloud-tie-wrapper"></div>
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          <img class="site-author-image" itemprop="image"
+               src="https://avatars2.githubusercontent.com/u/824526?v=3&s=460"
+               alt="stcatz" />
+          <p class="site-author-name" itemprop="name">stcatz</p>
+           
+              <p class="site-description motion-element" itemprop="description"></p>
+           
+        </div>
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+              <a href="/archives">
+                <span class="site-state-item-count">2</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">1</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+          <div class="feed-link motion-element">
+            <a href="/atom.xml" rel="alternate">
+              <i class="fa fa-rss"></i>
+              RSS
+            </a>
+          </div>
+        
+
+        <div class="links-of-author motion-element">
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#SQL缩放模式"><span class="nav-number">1.</span> <span class="nav-text">SQL缩放模式</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#NoSQL"><span class="nav-number">1.1.</span> <span class="nav-text">NoSQL</span></a></li></ol></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2017</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">stcatz</span>
+</div>
+
+
+<div class="powered-by">
+  由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动
+</div>
+
+<div class="theme-info">
+  主题 -
+  <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">
+    NexT.Mist
+  </a>
+</div>
+
+
+        
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.0"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.0"></script>
+
+
+
+  
+  
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.0"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.0"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.0"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+    
+    <script>
+      var cloudTieConfig = {
+        url: document.location.href, 
+        sourceId: "",
+        productKey: "50916199d6d14e49a256149d8b63a2dd",
+        target: "cloud-tie-wrapper"
+      };
+    </script>
+    <script src="https://img1.ws.126.net/f2e/tie/yun/sdk/loader.js"></script>
+  
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+<script>
+(function(){
+    var bp = document.createElement('script');
+    var curProtocol = window.location.protocol.split(':')[0];
+    if (curProtocol === 'https') {
+        bp.src = 'https://zz.bdstatic.com/linksubmit/push.js';        
+    }
+    else {
+        bp.src = 'http://push.zhanzhang.baidu.com/push.js';
+    }
+    var s = document.getElementsByTagName("script")[0];
+    s.parentNode.insertBefore(bp, s);
+})();
+</script>
+
+
+  
+
+  
+
+</body>
+</html>

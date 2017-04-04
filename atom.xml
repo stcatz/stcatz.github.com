@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>St.c@tz</title>
+  
+  <link href="/atom.xml" rel="self"/>
+  
+  <link href="http://stcatz.com/"/>
+  <updated>2017-04-04T08:45:25.000Z</updated>
+  <id>http://stcatz.com/</id>
+  
+  <author>
+    <name>stcatz</name>
+    
+  </author>
+  
+  <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>[译]如何设计一个在AWS上可以扩展到数百万用户的系统</title>
+    <link href="http://stcatz.com/2017/04/01/aws-system-design/"/>
+    <id>http://stcatz.com/2017/04/01/aws-system-design/</id>
+    <published>2017-04-01T09:00:58.000Z</published>
+    <updated>2017-04-04T08:45:25.000Z</updated>
+    
+    <content type="html"><![CDATA[<blockquote><p>译注：《The System Design Primer》是一位大神<a href="http://donnemartin.com/" target="_blank" rel="external">Donne Martin</a>写的关于如何回答面试中系统设计方面问题的电子书，其中《如何设计一个在AWS上可以扩展到数百万用户的系统》最具有代表性。我觉得这篇文章不仅可以用来准备面试，更是可以作为开始一个新项目的架构指南。当然一篇文章能容纳的内容有限，本篇所涉及的很多话题可以很轻易的扩展成一本书，很多大公司会有专门的团队负责开发/维护文中的一些模块。读者可以把本篇文章作为一个互联网系统架构设计的提纲，在有需要的话题下再深入下去。</p>
+<footer><strong>The System Design Primer</strong><cite><a href="https://github.com/donnemartin/system-design-primer" target="_blank" rel="external">Design a system that scales to millions of users on AWS</a></cite></footer></blockquote>
+<a id="more"></a>
+<h1 id="设计一个在AWS上可以扩展到数百万用户的系统"><a href="#设计一个在AWS上可以扩展到数百万用户的系统" class="headerlink" title="设计一个在AWS上可以扩展到数百万用户的系统"></a>设计一个在AWS上可以扩展到数百万用户的系统</h1><p><em>注意：为避免重复，本文档中有些话题直接链接到<a href="https://github.com/donnemartin/system-design-primer#index-of-system-design-topics" target="_blank" rel="external">系统设计主题</a>中的相关区域的。请参阅链接内容，了解一般回答要点，取舍和替代方案。</em></p>
+<h2 id="步骤1：用例和约束条件"><a href="#步骤1：用例和约束条件" class="headerlink" title="步骤1：用例和约束条件"></a>步骤1：用例和约束条件</h2><blockquote>
+<p>明确问题的需求和适用范围。<br>提出问题来澄清用例和约束条件。<br>讨论假设。</p>
+</blockquote>
+<p>在这里没有面试官来澄清问题，我们先来定义一些用例和约束条件。</p>
+<h3 id="用例"><a href="#用例" class="headerlink" title="用例"></a>用例</h3><p>解决这个问题需要迭代的方法：1）<strong>基准/负载测试</strong>，2）<strong>分析</strong>瓶颈3）解决瓶颈，同时评估替代方案和取舍点。4）重复以上步骤，这是将一个基本的架构设计演变成可扩展架构设计的很好方式。</p>
+<p>除非您有AWS的背景或正在申请需要AWS知识的职位，否则关于AWS的特定的细节信息并不需要了解。<strong>本练习中讨论的许多原则可以更普遍地适用于AWS生态系统之外。</strong></p>
+<h4 id="我们将问题的范围局限在以下用例"><a href="#我们将问题的范围局限在以下用例" class="headerlink" title="我们将问题的范围局限在以下用例"></a>我们将问题的范围局限在以下用例</h4><ul>
+<li><strong>用户</strong>进行读或写请求<ul>
+<li><strong>服务</strong>处理，存储用户数据，然后返回结果</li>
+</ul>
+</li>
+<li><strong>服务</strong>需要从少量用户的服务发展到数百万的用户<ul>
+<li>在架构演化到处理大量用户数据和请求的过程中，讨论通用的扩展模式</li>
+</ul>
+</li>
+<li><strong>服务</strong>具有高可用性</li>
+</ul>
+<h3 id="约束和假设"><a href="#约束和假设" class="headerlink" title="约束和假设"></a>约束和假设</h3><h4 id="陈述假设"><a href="#陈述假设" class="headerlink" title="陈述假设"></a>陈述假设</h4><ul>
+<li>流量分布不均匀</li>
+<li>需要关系数据</li>
+<li>从一个用户扩展到数千万用户<ul>
+<li>将用户数量增加标记为：<ul>
+<li>用户+</li>
+<li>用户++</li>
+<li>用户+++</li>
+<li>…</li>
+</ul>
+</li>
+<li>1000万用户</li>
+<li>每月10亿写入操作</li>
+<li>每月1000亿读取操作</li>
+<li>读写比100: 1</li>
+<li>每次写入1KB内容</li>
+</ul>
+</li>
+</ul>
+<h4 id="计算用量"><a href="#计算用量" class="headerlink" title="计算用量"></a>计算用量</h4><p><strong>假设不清楚时，向面试官澄清你是否需要估算数据。</strong></p>
+<ul>
+<li>每月1TB新增内容<ul>
+<li>每个写入1KB * 每月写入10亿次</li>
+<li>3年内有36TB的新增内容</li>
+<li>假设大多数写入来自新内容，而不是对现有内容的更新</li>
+</ul>
+</li>
+<li>平均每秒400次写入</li>
+<li>平均每秒40000次读取</li>
+</ul>
+<p>转换指南：</p>
+<ul>
+<li>每月有250万秒</li>
+<li>每秒1个请求=每月250万个请求</li>
+<li>每秒40个请求=每月1亿个请求  </li>
+<li>每秒400个请求=每月10亿个请求</li>
+</ul>
+<h2 id="步骤2：创建一个概要设计"><a href="#步骤2：创建一个概要设计" class="headerlink" title="步骤2：创建一个概要设计"></a>步骤2：创建一个概要设计</h2><blockquote>
+<p>描述一个包含所有重要模块的概要设计。</p>
+</blockquote>
+<p><img src="http://i.imgur.com/B8LDKD7.png" alt="Imgur"></p>
+<h2 id="步骤3：设计核心模块"><a href="#步骤3：设计核心模块" class="headerlink" title="步骤3：设计核心模块"></a>步骤3：设计核心模块</h2><blockquote>
+<p>详细介绍每个核心组件。</p>
+</blockquote>
+<h3 id="用例：用户进行读写请求"><a href="#用例：用户进行读写请求" class="headerlink" title="用例：用户进行读写请求"></a>用例：用户进行读写请求</h3><h4 id="目标"><a href="#目标" class="headerlink" title="目标"></a>目标</h4><ul>
+<li>只有1-2个用户，您只需要一个基本的配置<ul>
+<li>单服务器</li>
+<li>需要时垂直扩展</li>
+<li>监控以确定瓶颈</li>
+</ul>
+</li>
+</ul>
+<h4 id="从单机开始"><a href="#从单机开始" class="headerlink" title="从单机开始"></a>从单机开始</h4><ul>
+<li><strong> EC2上的Web服务器</strong><ul>
+<li>存储用户数据</li>
+<li><a href="https://github.com/donnemartin/system-design-primer#sql" target="_blank" rel="external"><strong> MySQL数据库</strong></a></li>
+</ul>
+</li>
+</ul>
+<p>使用<strong>垂直缩放</strong>：</p>
+<ul>
+<li>只需选择一个性能更强的服务器</li>
+<li>密切关注性能指标，以确定如何扩大规模<ul>
+<li>使用基本的监控来确定瓶颈：CPU，内存，IO，网络等</li>
+<li>CloudWatch，top，nagios，statsd，graphite等</li>
+</ul>
+</li>
+<li>垂直扩展非常昂贵</li>
+<li>无冗余/故障转移</li>
+</ul>
+<p><em>取舍，替代方案及其他细节：</em></p>
+<ul>
+<li><strong>垂直扩展</strong>的替代方案是<a href="https://github.com/donnemartin/system-design-primer#horizontal-scaling" target="_blank" rel="external"><strong>水平扩展</strong></a></li>
+</ul>
+<h4 id="从SQL开始，考虑使用NoSQL"><a href="#从SQL开始，考虑使用NoSQL" class="headerlink" title="从SQL开始，考虑使用NoSQL"></a>从SQL开始，考虑使用NoSQL</h4><p>假设有关系型数据的需求。我们可以在单服务器中使用<strong>MySQL数据库</strong>。</p>
+<p><em>取舍，替代方案及其他细节：</em></p>
+<ul>
+<li>参见<a href="https://github.com/donnemartin/system-design-primer#relational-database-management-system-rdbms" target="_blank" rel="external">关系数据库管理系统(RDBMS)</a>部分</li>
+<li>讨论使用<a href="https://github.com/donnemartin/system-design-primer#sql-or-nosql" target="_blank" rel="external">SQL或NoSQL</a>的原因</li>
+</ul>
+<h4 id="分配公开静态IP"><a href="#分配公开静态IP" class="headerlink" title="分配公开静态IP"></a>分配公开静态IP</h4><ul>
+<li>Elastic IPs 提供一个公开接入点，其IP在重新启动时不会改变</li>
+<li>帮助进行故障切换，只需将域名指向新的IP</li>
+</ul>
+<h4 id="使用DNS"><a href="#使用DNS" class="headerlink" title="使用DNS"></a>使用DNS</h4><p>添加一个<strong>DNS</strong>，如Route 53，将域名映射到实例的公共IP。</p>
+<p><em>取舍，替代方案及其他细节：</em></p>
+<ul>
+<li>请参阅<a href="https://github.com/donnemartin/system-design-primer#domain-name-system" target="_blank" rel="external">域名系统</a>部分</li>
+</ul>
+<h4 id="保护web服务器"><a href="#保护web服务器" class="headerlink" title="保护web服务器"></a>保护web服务器</h4><ul>
+<li>只打开必需的端口<ul>
+<li>允许Web服务器响应来自以下接口请求：<ul>
+<li>80用于HTTP</li>
+<li>443用于HTTPS</li>
+<li>只允许白名单IP通过SSH登录22端口</li>
+</ul>
+</li>
+<li>防止Web服务器访问站外链接</li>
+</ul>
+</li>
+</ul>
+<p><em>取舍，替代方案及其他细节：</em></p>
+<ul>
+<li>请参阅<a href="https://github.com/donnemartin/system-design-primer#security" target="_blank" rel="external">安全性</a>部分</li>
+</ul>
+<h2 id="步骤4：扩展设计"><a href="#步骤4：扩展设计" class="headerlink" title="步骤4：扩展设计"></a>步骤4：扩展设计</h2><blockquote>
+<p>在约束条件下，找到并解决瓶颈。</p>
+</blockquote>
+<h3 id="用户"><a href="#用户" class="headerlink" title="用户+"></a>用户+</h3><p><img src="http://i.imgur.com/rrfjMXB.png" alt="Imgur"></p>
+<h4 id="假设"><a href="#假设" class="headerlink" title="假设"></a>假设</h4><p>我们的用户数量开始上升，单个服务器上的负载持续增加。我们的<strong>基准/负载测试</strong>和<strong>分析</strong>表明<strong>MySQL数据库</strong>占用越来越多的内存和CPU资源，而用户内容正在占满磁盘空间。</p>
+<p>目前为止，我们已经能够使用<strong>垂直扩展</strong>来解决这些问题。不幸的是，这个策略非常昂贵并且不能分别扩展<strong>MySQL数据库</strong>和<strong>Web服务器</strong>。</p>
+<h4 id="目标-1"><a href="#目标-1" class="headerlink" title="目标"></a>目标</h4><ul>
+<li>减轻单个服务器上的负载，可以分别扩展数据库和服务器<ul>
+<li>将静态内容存储在<strong>对象存储</strong></li>
+<li>将<strong>MySQL数据库</strong>移动到一个单独的服务器</li>
+</ul>
+</li>
+<li>缺点<ul>
+<li>这些更改会增加复杂性，并且需要更改<strong>Web服务器</strong>以指向<strong>对象存储</strong>和<strong>MySQL数据库</strong></li>
+<li>必须采取额外的安全措施来确保新模块的安全</li>
+<li>AWS的成本也可能会增加，但应该与自己管理类似系统的成本进行权衡</li>
+</ul>
+</li>
+</ul>
+<h4 id="将静态内容分离"><a href="#将静态内容分离" class="headerlink" title="将静态内容分离"></a>将静态内容分离</h4><ul>
+<li>考虑使用像S3一样的托管<strong>对象存储</strong>来存储静态内容<ul>
+<li>高度可扩展和可靠</li>
+<li>服务器端加密</li>
+</ul>
+</li>
+<li>将静态内容存储到S3<ul>
+<li>用户文件</li>
+<li>JS</li>
+<li>CSS</li>
+<li>图片</li>
+<li>视频</li>
+</ul>
+</li>
+</ul>
+<h4 id="将MySQL数据库移动到单独的服务器中"><a href="#将MySQL数据库移动到单独的服务器中" class="headerlink" title="将MySQL数据库移动到单独的服务器中"></a>将MySQL数据库移动到单独的服务器中</h4><ul>
+<li>考虑使用像RDS这样的服务来管理<strong>MySQL数据库</strong><ul>
+<li>简化管理，可扩展</li>
+<li>多个可用区域</li>
+<li>数据加密 <a href="https://en.wikipedia.org/wiki/Data_at_rest#Encryption" target="_blank" rel="external">译注</a></li>
+</ul>
+</li>
+</ul>
+<h4 id="保护系统"><a href="#保护系统" class="headerlink" title="保护系统"></a>保护系统</h4><ul>
+<li>在传输和持久化过程中加密数据</li>
+<li>使用虚拟网络<ul>
+<li>为单个<strong>Web服务器</strong>创建一个公共子网，以便它可以从互联网发送和接收数据</li>
+<li>创建一个私有子网，防止外部访问</li>
+<li>为每个模块只打开白名单IP的端口</li>
+</ul>
+</li>
+<li>在本练习的其余部分，应所有新加模块采取相同的模式</li>
+</ul>
+<p><em>取舍，替代方案及其他细节</em></p>
+<ul>
+<li>请参阅<a href="https://github.com/donnemartin/system-design-primer#security" target="_blank" rel="external">安全性</a>部分</li>
+</ul>
+<h3 id="用户-1"><a href="#用户-1" class="headerlink" title="用户++"></a>用户++</h3><p><img src="http://i.imgur.com/raoFTXM.png" alt="Imgur"></p>
+<h4 id="假设-1"><a href="#假设-1" class="headerlink" title="假设"></a>假设</h4><p>我们的<strong>基准/负载测试</strong>和<strong>分析</strong>显示，的单个<strong>Web服务器</strong>在高峰时段出现瓶颈，导致响应缓慢，在某些情况下停机。随着服务的成熟，我们可以开始考虑高可用性和冗余方案。</p>
+<h4 id="目标-2"><a href="#目标-2" class="headerlink" title="目标"></a>目标</h4><ul>
+<li>以下目标尝试解决<strong>Web服务器</strong>的可扩展问题<ul>
+<li>根据<strong>基准/负载测试</strong>和<strong>分析</strong>，您可能只需要实现这些技术中的一个或两个</li>
+</ul>
+</li>
+<li>使用<a href="https://github.com/donnemartin/system-design-primer#horizontal-scaling" target="_blank" rel="external"><strong>水平扩展</strong></a>来处理增加的负载的能力并解决单点故障<ul>
+<li>添加一个<a href="https://github.com/donnemartin/system-design-primer#load-balancer" target="_blank" rel="external"><strong>负载均衡</strong></a>，如亚马逊的ELB或HAProxy<ul>
+<li>ELB是高可用的</li>
+<li>如果搭建自己的<strong>负载均衡</strong>，请在多个可用区配置成<a href="https://github.com/donnemartin/system-design-primer#active-active" target="_blank" rel="external">双主</a>或<a href="https://github.com/donnemartin/system-design-primer#active-passive" target="_blank" rel="external">主从</a>模式以提高可用性</li>
+<li>在<strong>负载均衡</strong>这一层面终止SSL，以减少后端服务器的计算负载，并简化证书管理</li>
+</ul>
+</li>
+<li>使用多个<strong>Web服务器</strong>分布在多个可用区域</li>
+<li>在多个可用区域中，在<a href="https://github.com/donnemartin/system-design-primer#master-slave-replication" target="_blank" rel="external"><strong>主从动故障切换</strong></a>模式下使用多个<strong>MySQL</strong>实例，以增加冗余</li>
+<li>将<strong>Web服务器</strong>从<a href="https://github.com/donnemartin/system-design-primer#application-layer" target="_blank" rel="external"><strong>应用程序服务器</strong></a>中分离出来<ul>
+<li>分别配置和扩展Web层和应用层</li>
+<li><strong>Web服务器</strong>可以作为<a href="https://github.com/donnemartin/system-design-primer#reverse-proxy-web-server" target="_blank" rel="external"><strong>反向代理</strong></a></li>
+<li>例如，您可以添加<strong>应用程序服务器</strong>专门处理<strong>读取API</strong>，而其他负责处理<strong>写入API</strong></li>
+</ul>
+</li>
+<li>将静态（和一些动态）内容移动到<a href="https://github.com/donnemartin/system-design-primer#content-delivery-network" target="_blank" rel="external"><strong>内容传送网络（CDN）</strong></a>，来降低负载和延迟</li>
+</ul>
+</li>
+</ul>
+<p><em>取舍，替代方案及其他细节：</em></p>
+<ul>
+<li>有关详细信息，请参阅上述链接内容</li>
+</ul>
+<p>###用户+++</p>
+<p><img src="http://i.imgur.com/OZCxJr0.png" alt="Imgur"></p>
+<p><strong>注意：</strong> 为减少图的复杂程度，<strong>内部负载均衡</strong>没有画出</p>
+<h4 id="假设-2"><a href="#假设-2" class="headerlink" title="假设"></a>假设</h4><p>我们的<strong>基准/负载测试</strong>和<strong>分析</strong>显示我们的应用读取请求多于写入请求（读写比100：1），过多的读取请求严重降低了数据库的性能。</p>
+<h4 id="目标-3"><a href="#目标-3" class="headerlink" title="目标"></a>目标</h4><ul>
+<li>以下目标尝试解决<strong>MySQL数据库</strong>的可扩展问题<ul>
+<li>基于<strong>基准/负载测试</strong>和<strong>分析</strong>，您可能只需要实现这些技术中的一个或两个</li>
+</ul>
+</li>
+<li>将以下数据移动到<a href="https://github.com/donnemartin/system-design-primer#cache" target="_blank" rel="external"><strong>Memory Cache</strong></a>，如Elasticache，以减少负载和延迟：<ul>
+<li>经常从<strong>MySQL</strong>读取的内容<ul>
+<li>首先，在应用<strong>Memory Cache</strong>之前先尝试配置<strong>MySQL数据库</strong>缓存，来调查是否足以解决现存的瓶颈</li>
+</ul>
+</li>
+<li>来自<strong>Web服务器</strong>的会话数据<ul>
+<li><strong>Web服务器</strong>是无状态的，允许<strong>自动扩展</strong></li>
+</ul>
+</li>
+<li>从内存中读取1MB大约需要250微秒，而从SSD读取4倍的时间，而从磁盘读取需要80倍的时间。</li>
+</ul>
+</li>
+<li>添加<a href="https://github.com/donnemartin/system-design-primer#master-slave-replication" target="_blank" rel="external"><strong>MySQL读取副本</strong></a>以减少写入服务器的负载</li>
+<li>添加更多<strong>Web服务器</strong>和<strong>应用程序服务器</strong>以提高响应能力</li>
+</ul>
+<p><em>取舍，替代方案及其他细节：</em></p>
+<ul>
+<li>有关详细信息，请参阅上述链接内容</li>
+</ul>
+<h4 id="添加MySQL读取副本"><a href="#添加MySQL读取副本" class="headerlink" title="添加MySQL读取副本"></a>添加MySQL读取副本</h4><ul>
+<li>除了添加和扩展<strong>Memory Cache</strong>，<strong>MySQL读副本</strong>还可以帮助减轻对<strong>MySQL master写入节点</strong>的负载</li>
+<li>修改<strong>Web服务器</strong>，区分写入请求和读取请求</li>
+<li>在<strong>MySQL读副本</strong>添加<strong>负载均衡</strong>（未在图中标示）</li>
+<li>大多数服务都是重读取，而不是重写入</li>
+</ul>
+<p><em>取舍，替代方案及其他细节：</em></p>
+<ul>
+<li>参见<a href="https://github.com/donnemartin/system-design-primer#relational-database-management-system-rdbms" target="_blank" rel="external">关系数据库管理系统（RDBMS）</a>部分</li>
+</ul>
+<h3 id="用户-2"><a href="#用户-2" class="headerlink" title="用户++++"></a>用户++++</h3><p><img src="http://i.imgur.com/3X8nmdL.png" alt="Imgur"></p>
+<p>####假设</p>
+<p>我们的<strong>基准/负载测试</strong>和<strong>分析</strong>显示，我们的流量在美国的工作时间达到高峰，当用户离开办公室时流量显着下降，可以通过根据实际负载自动启动和关闭服务器来降低成本。我们是一个小商店，所以我们希望尽可能自动化地完成<strong>自动缩放</strong>和一般DevOps运维操作。</p>
+<p>####目标</p>
+<ul>
+<li>根据需要添加<strong>自动扩展</strong>功能以提高系统容量<ul>
+<li>在流量顶峰正常工作</li>
+<li>通过关闭未使用的实例来降低成本</li>
+</ul>
+</li>
+<li>自动化DevOps<ul>
+<li>Chef, Puppet, Ansible等</li>
+</ul>
+</li>
+<li>继续监控指标来找出系统瓶颈<ul>
+<li><strong>主机级别</strong> - 评估单个EC2实例的表现</li>
+<li><strong>综合等级</strong> - 查看负载均衡的统计信息</li>
+<li><strong>日志分析</strong> - CloudWatch，CloudTrail，Loggly，Splunk，Sumo</li>
+<li><strong>外部网站分析工具</strong> - Pingdom或New Relic</li>
+<li><strong>处理通知和事件</strong> - PagerDuty</li>
+<li><strong>错误报告</strong> - Sentry</li>
+</ul>
+</li>
+</ul>
+<h4 id="添加自动缩放"><a href="#添加自动缩放" class="headerlink" title="添加自动缩放"></a>添加自动缩放</h4><ul>
+<li>考虑使用一个托管服务，如AWS <strong>Autoscaling</strong><ul>
+<li>为每个<strong>Web服务器</strong>创建一个组，并为每个<strong>应用程序服务器</strong>类型创建一个组，并将每个组放置在多个可用区域中</li>
+<li>设置最小和最大数量的实例</li>
+<li>通过CloudWatch触发启动和关闭实例<ul>
+<li>根据一天内不同时间段的历史负载数据，或</li>
+<li>一段时间内的指标：<ul>
+<li>CPU负载</li>
+<li>网络延迟</li>
+<li>网络流量</li>
+<li>自定义指标</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>缺点<ul>
+<li>自动缩放可以引入复杂性</li>
+<li>系统可能需要一段时间才能扩大容量来处理增加的请求，或者在请求降低的时候缩减容量</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="用户-3"><a href="#用户-3" class="headerlink" title="用户+++++"></a>用户+++++</h3><p><img src="http://i.imgur.com/jj3A5N8.png" alt="Imgur"></p>
+<p><strong>注意：</strong> <strong>自动缩放</strong>组未标示</p>
+<h4 id="假设-3"><a href="#假设-3" class="headerlink" title="假设"></a>假设</h4><p>随着服务的不断扩大，我们继续迭代运行<strong>基准/负载测试</strong>和<strong>剖析</strong>来发现和解决新的瓶颈。</p>
+<h4 id="目标-4"><a href="#目标-4" class="headerlink" title="目标"></a>目标</h4><p>鉴于问题的约束，我们将继续解决可扩展问题：</p>
+<ul>
+<li>如果我们的<strong>MySQL数据库</strong>过于庞大，我们可能只考虑在数据库中存储有限时间段内数据，而将其余数据存储在数据仓库中，如Redshift<ul>
+<li>Redshift等数据仓库可以轻松地处理每月1TB新增内容</li>
+</ul>
+</li>
+<li>如果每秒有4万次读取请求，通过扩展<strong>Memory Cache</strong>集群可以很好的应对经常被访问内容的读取流量，这样做对于处理不均匀分布的流量和流量峰值也很有用<ul>
+<li><strong>SQL读取副本</strong>可能在处理缓存未命中时遇到问题，我们需要使用其他SQL扩展模式</li>
+</ul>
+</li>
+<li>平均每秒400次写入请求（在流量峰值时可能更高），对于单个<strong>SQL Master-Slave</strong>写入节点来说可能是困难的，同样地也表明需要额外的扩展技术</li>
+</ul>
+<p>SQL扩展模式包括：</p>
+<ul>
+<li><a href="https://github.com/donnemartin/system-design-primer#federation" target="_blank" rel="external">联合</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#sharding" target="_blank" rel="external">分片</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#denormalization" target="_blank" rel="external">反规范化</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#sql-tuning" target="_blank" rel="external">SQL调优</a></li>
+</ul>
+<p>为了进一步解决高读写请求，我们还应考虑将适当的数据移动到<a href="https://github.com/donnemartin/system-design-primer#nosql" target="_blank" rel="external"><strong>NoSQL数据库</strong></a>，如DynamoDB。</p>
+<p>我们可以进一步分离我们的<a href="https://github.com/donnemartin/system-design-primer#application-layer" target="_blank" rel="external"><strong>应用服务器</strong></a>，以允许独立扩展。可以把不需要实时完成计算任务通过<strong>队列</strong>和<strong>Worker</strong>用批处理或<a href="https://github.com/donnemartin/system-design-primer#asynchronism" target="_blank" rel="external"><strong>异步</strong></a>的方式来完成：</p>
+<ul>
+<li>例如，在照片服务中，照片上传和缩略图创建可以分开：<ul>
+<li><strong>客户</strong>上传照片</li>
+<li><strong>应用服务器</strong>将任务放在<strong>Queue</strong>（如SQS）中</li>
+<li><strong>任务服务</strong>在EC2或Lambda读取工作的<strong>队列</strong>然后：<ul>
+<li>创建缩略图</li>
+<li>更新<strong>数据库</strong></li>
+<li>将缩略图存储在<strong>Object Store</strong></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p><em>取舍，替代方案及其他细节：</em></p>
+<ul>
+<li>有关详细信息，请参阅上述链接内容</li>
+</ul>
+<p>##其他要点</p>
+<blockquote>
+<p>根据问题范围和剩余时间，深入其他主题。</p>
+</blockquote>
+<h3 id="SQL缩放模式"><a href="#SQL缩放模式" class="headerlink" title="SQL缩放模式"></a>SQL缩放模式</h3><ul>
+<li><a href="https://github.com/donnemartin/system-design-primer#master-slave" target="_blank" rel="external">读取副本</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#federation" target="_blank" rel="external">联合</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#sharding" target="_blank" rel="external">分片</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#denormalization" target="_blank" rel="external">反规范化</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#sql-tuning" target="_blank" rel="external">SQL调优</a></li>
+</ul>
+<h4 id="NoSQL"><a href="#NoSQL" class="headerlink" title="NoSQL"></a>NoSQL</h4><ul>
+<li><a href="https://github.com/donnemartin/system-design-primer#key-value-store" target="_blank" rel="external">键值存储</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#document-store" target="_blank" rel="external">文件存储</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#wide-column-store" target="_blank" rel="external">表格存储</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#graph-database" target="_blank" rel="external">图数据库</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#sql-or-nosql" target="_blank" rel="external">SQL vs NoSQL</a></li>
+</ul>
+<p>###缓存</p>
+<ul>
+<li><p>在哪里缓存</p>
+<ul>
+<li><a href="https://github.com/donnemartin/system-design-primer#client-caching" target="_blank" rel="external">客户端缓存</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#cdn-caching" target="_blank" rel="external">CDN缓存</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#web-server-caching" target="_blank" rel="external">Web服务器缓存</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#database-caching" target="_blank" rel="external">数据库缓存</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#application-caching" target="_blank" rel="external">应用缓存</a></li>
+</ul>
+</li>
+<li><p>缓存什么</p>
+<ul>
+<li><a href="https://github.com/donnemartin/system-design-primer#caching-at-the-database-query-level" target="_blank" rel="external">在数据库查询级别缓存</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#caching-at-the-object-level" target="_blank" rel="external">在对象级缓存</a></li>
+</ul>
+</li>
+<li><p>何时更新缓存</p>
+<ul>
+<li><a href="https://github.com/donnemartin/system-design-primer#cache-aside" target="_blank" rel="external">Cache-aside</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#write-through" target="_blank" rel="external">Write-through</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#write-behind-write-back" target="_blank" rel="external">Write-back（write-back）</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#refresh-ahead" target="_blank" rel="external">Refresh ahead</a></li>
+</ul>
+</li>
+</ul>
+<p>###异步和微服务</p>
+<ul>
+<li><a href="https://github.com/donnemartin/system-design-primer#message-queues" target="_blank" rel="external">消息队列</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#task-queues" target="_blank" rel="external">任务队列</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#back-pressure" target="_blank" rel="external">限流</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#microservices" target="_blank" rel="external">微服务</a></li>
+</ul>
+<h3 id="通讯"><a href="#通讯" class="headerlink" title="通讯"></a>通讯</h3><p>讨论取舍：</p>
+<ul>
+<li>与外部通讯 - <a href="https://github.com/donnemartin/system-design-primer#representational-state-transfer-rest" target="_blank" rel="external">REST风格的HTTP API</a></li>
+<li>内部通讯 - <a href="https://github.com/donnemartin/system-design-primer#remote-procedure-call-rpc" target="_blank" rel="external">RPC</a></li>
+<li><a href="https://github.com/donnemartin/system-design-primer#service-discovery" target="_blank" rel="external">服务发现</a></li>
+</ul>
+<h3 id="安全"><a href="#安全" class="headerlink" title="安全"></a>安全</h3><ul>
+<li>请参阅<a href="https://github.com/donnemartin/system-design-primer#security" target="_blank" rel="external">安全部分</a>。</li>
+</ul>
+<h3 id="延迟数据"><a href="#延迟数据" class="headerlink" title="延迟数据"></a>延迟数据</h3><p>请参阅<a href="https://github.com/donnemartin/system-design-primer#latency-numbers-every-programmer-should-know" target="_blank" rel="external">每个程序员应该知道的延迟数据</a>。</p>
+<h3 id="正在进行"><a href="#正在进行" class="headerlink" title="正在进行"></a>正在进行</h3><ul>
+<li>继续对系统进行基准测试和监控，以解决瓶颈问题</li>
+<li>扩展是一个迭代过程</li>
+</ul>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;blockquote&gt;&lt;p&gt;译注：《The System Design Primer》是一位大神&lt;a href=&quot;http://donnemartin.com/&quot;&gt;Donne Martin&lt;/a&gt;写的关于如何回答面试中系统设计方面问题的电子书，其中《如何设计一个在AWS上可以扩展到数百万用户的系统》最具有代表性。我觉得这篇文章不仅可以用来准备面试，更是可以作为开始一个新项目的架构指南。当然一篇文章能容纳的内容有限，本篇所涉及的很多话题可以很轻易的扩展成一本书，很多大公司会有专门的团队负责开发/维护文中的一些模块。读者可以把本篇文章作为一个互联网系统架构设计的提纲，在有需要的话题下再深入下去。&lt;/p&gt;
+&lt;footer&gt;&lt;strong&gt;The System Design Primer&lt;/strong&gt;&lt;cite&gt;&lt;a href=&quot;https://github.com/donnemartin/system-design-primer&quot;&gt;Design a system that scales to millions of users on AWS&lt;/a&gt;&lt;/cite&gt;&lt;/footer&gt;&lt;/blockquote&gt;
+    
+    </summary>
+    
+    
+      <category term="架构" scheme="http://stcatz.com/tags/%E6%9E%B6%E6%9E%84/"/>
+    
+      <category term="面试" scheme="http://stcatz.com/tags/%E9%9D%A2%E8%AF%95/"/>
+    
+  </entry>
+  
+</feed>
