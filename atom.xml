@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <title>St.c@tz</title>
+  <title>St.c@tz&#39;s lock</title>
   
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://stcatz.com/"/>
-  <updated>2017-04-04T09:04:22.000Z</updated>
+  <updated>2017-04-04T09:24:51.000Z</updated>
   <id>http://stcatz.com/</id>
   
   <author>
@@ -20,7 +20,7 @@
     <link href="http://stcatz.com/2017/04/01/aws-system-design/"/>
     <id>http://stcatz.com/2017/04/01/aws-system-design/</id>
     <published>2017-04-01T09:00:58.000Z</published>
-    <updated>2017-04-04T09:04:22.000Z</updated>
+    <updated>2017-04-04T09:24:51.000Z</updated>
     
     <content type="html"><![CDATA[<blockquote><p>译注：《The System Design Primer》是一位大神<a href="http://donnemartin.com/" target="_blank" rel="external">Donne Martin</a>写的关于如何回答面试中系统设计方面问题的电子书，其中《如何设计一个在AWS上可以扩展到数百万用户的系统》最具有代表性。我觉得这篇文章不仅可以用来准备面试，更是可以作为开始一个新项目的架构指南。当然一篇文章能容纳的内容有限，本篇所涉及的很多话题可以很轻易的扩展成一本书，很多大公司会有专门的团队负责开发/维护文中的一些模块。读者可以把本篇文章作为一个互联网系统架构设计的提纲，在有需要的话题下再深入下去。</p>
 <footer><strong>The System Design Primer</strong><cite><a href="https://github.com/donnemartin/system-design-primer" target="_blank" rel="external">Design a system that scales to millions of users on AWS</a></cite></footer></blockquote>
